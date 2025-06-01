@@ -88,15 +88,24 @@ def assign_return(name: str, args: list, return_args: list, parser):
 
 
 
-def extract(statements, start: int, end: int, parser):
+def extract(statements, start: int, end: int, parser, func_name = "_extracted"):
+    # DFS along the possible paths
+    stack = []
+    stack.append(start)
     table = {}
-    for i, statement in enumerate(statements):
-        wids, rids = walk(statement)
+
+    while len(stack) > 0:
+        cur = stack.pop()
+        if (statements[cur].type == "if_statement"):
+            print("if statement")
+
+        wids, rids = walk(statements[cur])
         region = (
-            Region.BEFORE if i < start 
-            else Region.AFTER if i > end 
+            Region.BEFORE if cur < start 
+            else Region.AFTER if cur > end 
             else Region.WITHIN
         )
+
         # Check through read before write
         rids_sym = list(map(lambda id: id.text, rids))
         for id_sym in rids_sym:
@@ -112,8 +121,11 @@ def extract(statements, start: int, end: int, parser):
             if id_sym not in table:
                 table[id_sym] = np.zeros([Region.TOTAL.value, Status.TOTAL.value])
             table[id_sym][region.value][Status.WRITE_FULL.value] = 1 # assume always written
-        
-    func_name = "f1"
+
+        # normal case
+        if (cur + 1 <= end):
+            stack.append(cur + 1)
+
     args = get_args(table)
     results = get_results(table)
     replaced_function = create_function(func_name, args, statements[start: end + 1], results, parser)
@@ -135,14 +147,17 @@ def convert(root, start: int, end: int, parser):
 
 
 code = '''
-x = 1
-y = 2
-x = y + 1
-y = x + 2
+x = 2
+y = 1
+if (x == 1):
+    y = 3
+else:
+    x = 1
 '''
 import tree_sitter_python as tspython
 from tree_sitter import Language, Parser
 PY_LANGUAGE = Language(tspython.language())
 parser = Parser(PY_LANGUAGE)
 root = parser.parse(code.encode("utf-8")).root_node
-print(convert(root, 0, 2, parser).text.decode("utf-8"))
+print(root)
+print(convert(root, 1, 3, parser).text.decode("utf-8"))
